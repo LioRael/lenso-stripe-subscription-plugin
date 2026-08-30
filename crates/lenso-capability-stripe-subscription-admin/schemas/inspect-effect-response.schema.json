@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["effect_id", "operation", "status", "stripe_object_id", "url", "expires_at", "failure_code"],
+  "properties": {
+    "effect_id": {"type": "string"},
+    "operation": {"type": "string", "enum": ["checkout", "portal"]},
+    "status": {"type": "string", "enum": ["prepared", "in_flight", "accepted", "known_failure", "effect_unknown"]},
+    "stripe_object_id": {"$ref": "#/$defs/NullableString"},
+    "url": {"$ref": "#/$defs/NullableString", "x-lenso-sensitive": true},
+    "expires_at": {"$ref": "#/$defs/NullableTimestamp"},
+    "failure_code": {"$ref": "#/$defs/NullableString"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "NullableString": {"type": ["string", "null"]},
+    "NullableTimestamp": {"type": ["string", "null"], "format": "date-time"}
+  },
+  "title": "InspectEffectResponse"
+}
+

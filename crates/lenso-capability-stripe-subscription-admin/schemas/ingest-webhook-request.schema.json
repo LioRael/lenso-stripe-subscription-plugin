@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["raw_body", "signature_header"],
+  "properties": {
+    "raw_body": {"type": "string", "maxLength": 1048576, "x-lenso-sensitive": true},
+    "signature_header": {"type": "string", "minLength": 1, "maxLength": 8192, "x-lenso-sensitive": true}
+  },
+  "additionalProperties": false,
+  "title": "IngestWebhookRequest"
+}
+

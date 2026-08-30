@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["scope_kind", "scope_id", "subject", "customer_id", "subscription_id", "price_alias", "status", "cancel_at_period_end", "current_period_end", "entitlement_state", "revision"],
+  "properties": {
+    "scope_kind": {"type": "string"},
+    "scope_id": {"type": "string"},
+    "subject": {"type": "string"},
+    "customer_id": {"type": "string"},
+    "subscription_id": {"$ref": "#/$defs/NullableString"},
+    "price_alias": {"$ref": "#/$defs/NullableString"},
+    "status": {"type": "string", "enum": ["none", "incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused", "unknown"]},
+    "cancel_at_period_end": {"type": "boolean"},
+    "current_period_end": {"$ref": "#/$defs/NullableTimestamp"},
+    "entitlement_state": {"type": "string", "enum": ["pending", "granted", "revoked", "failed"]},
+    "revision": {"type": "integer", "minimum": 0}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "NullableString": {"type": ["string", "null"]},
+    "NullableTimestamp": {"type": ["string", "null"], "format": "date-time"}
+  },
+  "title": "GetSubscriptionResponse"
+}
+

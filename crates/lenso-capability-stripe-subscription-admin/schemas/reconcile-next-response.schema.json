@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["status", "subscription_id", "revision"],
+  "properties": {
+    "status": {"type": "string", "enum": ["idle", "converged", "retry_pending"]},
+    "subscription_id": {"$ref": "#/$defs/NullableString"},
+    "revision": {"$ref": "#/$defs/NullableInteger"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "NullableString": {"type": ["string", "null"]},
+    "NullableInteger": {"type": ["integer", "null"], "minimum": 0}
+  },
+  "title": "ReconcileNextResponse"
+}
+

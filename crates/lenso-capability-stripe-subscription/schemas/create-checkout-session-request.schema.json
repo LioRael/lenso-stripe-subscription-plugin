@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["scope_kind", "scope_id", "subject", "price_alias", "success_url", "cancel_url", "idempotency_key"],
+  "properties": {
+    "scope_kind": {"type": "string", "minLength": 1, "maxLength": 64},
+    "scope_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "subject": {"type": "string", "minLength": 1, "maxLength": 256},
+    "price_alias": {"type": "string", "minLength": 1, "maxLength": 128},
+    "success_url": {"type": "string", "minLength": 1, "maxLength": 2048},
+    "cancel_url": {"type": "string", "minLength": 1, "maxLength": 2048},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 255}
+  },
+  "additionalProperties": false,
+  "title": "CreateCheckoutSessionRequest"
+}

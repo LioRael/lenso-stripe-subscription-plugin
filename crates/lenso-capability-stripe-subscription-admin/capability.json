@@ -1,0 +1,37 @@
+{
+  "id": "lenso.stripe-subscription-admin@1",
+  "version": "1.0.0",
+  "portable": true,
+  "cross_lane_transfer": true,
+  "operations": [
+    {
+      "name": "ingest_webhook",
+      "interaction": "request",
+      "request_schema": "schemas/ingest-webhook-request.schema.json",
+      "response_schema": "schemas/ingest-webhook-response.schema.json",
+      "domain_error_schema": "schemas/ingest-webhook-error.schema.json"
+    },
+    {
+      "name": "reconcile_next",
+      "interaction": "request",
+      "request_schema": "schemas/reconcile-next-request.schema.json",
+      "response_schema": "schemas/reconcile-next-response.schema.json",
+      "domain_error_schema": "schemas/reconcile-next-error.schema.json"
+    },
+    {
+      "name": "inspect_effect",
+      "interaction": "request",
+      "request_schema": "schemas/inspect-effect-request.schema.json",
+      "response_schema": "schemas/inspect-effect-response.schema.json",
+      "domain_error_schema": "schemas/inspect-effect-error.schema.json"
+    },
+    {
+      "name": "resolve_unknown_effect",
+      "interaction": "request",
+      "request_schema": "schemas/resolve-unknown-effect-request.schema.json",
+      "response_schema": "schemas/resolve-unknown-effect-response.schema.json",
+      "domain_error_schema": "schemas/resolve-unknown-effect-error.schema.json"
+    }
+  ]
+}
+

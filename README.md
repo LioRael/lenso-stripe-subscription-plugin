@@ -8,3 +8,5 @@ entitlements without putting billing policy in the Runtime or Kernel.
 The implementation lives on a feature branch until its contracts, external
 effect ledger, webhook verification, and PostgreSQL behavior pass all gates.
 
+See [the Plugin card](docs/plugin-card.md) for the exact authority, effect,
+webhook, entitlement, and deletion boundaries.

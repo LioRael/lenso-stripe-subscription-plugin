@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["effect_id", "status", "session_id", "url", "expires_at"],
+  "properties": {
+    "effect_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "status": {"type": "string", "enum": ["accepted", "effect_unknown"]},
+    "session_id": {"$ref": "#/$defs/NullableString"},
+    "url": {"$ref": "#/$defs/NullableString", "x-lenso-sensitive": true},
+    "expires_at": {"$ref": "#/$defs/NullableTimestamp"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "NullableString": {"type": ["string", "null"]},
+    "NullableTimestamp": {"type": ["string", "null"], "format": "date-time"}
+  },
+  "title": "CreateCheckoutSessionResponse"
+}
+

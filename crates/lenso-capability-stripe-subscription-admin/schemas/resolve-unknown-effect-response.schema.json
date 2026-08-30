@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["effect_id", "status", "changed"],
+  "properties": {
+    "effect_id": {"type": "string"},
+    "status": {"type": "string", "enum": ["accepted", "known_failure"]},
+    "changed": {"type": "boolean"}
+  },
+  "additionalProperties": false,
+  "title": "ResolveUnknownEffectResponse"
+}
+
