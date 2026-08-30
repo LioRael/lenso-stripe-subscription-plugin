@@ -74,7 +74,7 @@ entitlements_source_patch="patch.crates-io.lenso-capability-entitlements-admin.p
   --config "$subscription_source_patch" \
   --config "$admin_source_patch" \
   --config "$entitlements_source_patch" \
-  package --quiet --offline "${plugin_package_flags[@]}" --no-verify \
+  package --quiet "${plugin_package_flags[@]}" --no-verify \
   -p lenso-stripe-subscription-plugin
 
 subscription_archive="$target_directory/package/lenso-capability-stripe-subscription-$subscription_version.crate"
