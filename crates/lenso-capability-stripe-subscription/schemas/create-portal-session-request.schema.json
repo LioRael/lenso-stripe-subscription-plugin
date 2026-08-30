@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["scope_kind", "scope_id", "subject", "return_url", "idempotency_key"],
+  "properties": {
+    "scope_kind": {"type": "string", "minLength": 1, "maxLength": 64},
+    "scope_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "subject": {"type": "string", "minLength": 1, "maxLength": 256},
+    "return_url": {"type": "string", "minLength": 1, "maxLength": 2048},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 255}
+  },
+  "additionalProperties": false,
+  "title": "CreatePortalSessionRequest"
+}

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {"const": "invalid_signature"},
+    {"const": "stale_signature"},
+    {"const": "invalid_event"},
+    {"const": "body_too_large"},
+    {"const": "forbidden"}
+  ]
+}

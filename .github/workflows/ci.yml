@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    env:
+      LENSO_STRIPE_SUBSCRIPTION_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/stripe_subscription_test
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: stripe_subscription_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=postgres --dbname=stripe_subscription_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # stable
+        with:
+          toolchain: 1.94.0
+          components: rustfmt, clippy
+      - name: Check generated Capability freshness
+        run: cargo check --locked --workspace
+      - name: Check Rust and PostgreSQL behavior
+        run: |
+          cargo fmt --all -- --check
+          cargo test --locked --workspace --all-features
+          cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+      - name: Check repository boundary
+        run: ./scripts/check-repository-boundary.sh
+      - name: Verify Plugin and Capability packages
+        run: cargo package --locked --workspace
