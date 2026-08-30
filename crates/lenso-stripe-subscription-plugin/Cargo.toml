@@ -17,16 +17,24 @@ default = []
 postgres-acceptance = []
 
 [dependencies]
+aes-gcm.workspace = true
+getrandom.workspace = true
 hmac.workspace = true
 lenso-capability-stripe-subscription = { path = "../lenso-capability-stripe-subscription", version = "0.1.0" }
 lenso-capability-stripe-subscription-admin = { path = "../lenso-capability-stripe-subscription-admin", version = "0.1.0" }
+lenso-postgres-kit.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+sqlx.workspace = true
 thiserror.workspace = true
 time.workspace = true
 url.workspace = true
+uuid.workspace = true
+zeroize.workspace = true
 
 [lints]
 workspace = true
 
+[dev-dependencies]
+tokio = { version = "1.52", features = ["macros", "rt"] }
