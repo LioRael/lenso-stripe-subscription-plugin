@@ -44,4 +44,4 @@ jobs:
       - name: Check repository boundary
         run: ./scripts/check-repository-boundary.sh
       - name: Verify Plugin and Capability packages
-        run: cargo package --locked --workspace
+        run: ./scripts/check-public-packages.sh
