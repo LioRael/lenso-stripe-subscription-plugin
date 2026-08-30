@@ -19,7 +19,7 @@ futures = "0.3"
 getrandom = "0.4"
 hmac = "0.12"
 lenso = { version = "0.5.0", git = "https://github.com/LioRael/lenso-runtime-rust", rev = "b763a63adc20f1ccc9955e784c0d04c21489126b" }
-lenso-capability-billing-meter-sink = { version = "0.1.0", git = "https://github.com/LioRael/lenso-usage-billing-plugin", rev = "5a214f49ef4271acb67a252c5b72375e90891034" }
+lenso-capability-billing-meter-sink = { version = "0.1.0", git = "https://github.com/LioRael/lenso-usage-billing-plugin", rev = "139874ae67f3c4ba1d8df04a0e793f1c5613a733" }
 lenso-capability-entitlements-admin = { version = "0.1.0", git = "https://github.com/LioRael/lenso-entitlements-plugin", rev = "bc953a0c6de9aefe5489f7c7e3ef2d215cc25c13" }
 lenso-capability-http-client = { version = "0.2.3", git = "https://github.com/LioRael/lenso-web", rev = "d3fa8b27c3dea470fcbf72183a7cca1fc032a117" }
 lenso-capability-secrets = { version = "0.1.1", git = "https://github.com/LioRael/lenso-secrets-plugin", rev = "c31aa142ff59b4536e2bf3e9785ccbb5bb5c0e6a" }

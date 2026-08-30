@@ -58,7 +58,7 @@ if [[ -z "$meter_source" ]]; then
   git clone --quiet --filter=blob:none --no-checkout \
     https://github.com/LioRael/lenso-usage-billing-plugin "$usage_billing_checkout"
   git -C "$usage_billing_checkout" checkout --quiet --detach \
-    5a214f49ef4271acb67a252c5b72375e90891034
+    139874ae67f3c4ba1d8df04a0e793f1c5613a733
   meter_source="$usage_billing_checkout/crates/lenso-capability-billing-meter-sink"
 fi
 entitlements_root="$(git -C "$entitlements_source" rev-parse --show-toplevel)"

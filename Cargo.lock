@@ -756,7 +756,7 @@ dependencies = [
 [[package]]
 name = "lenso-capability-billing-meter-sink"
 version = "0.1.0"
-source = "git+https://github.com/LioRael/lenso-usage-billing-plugin?rev=5a214f49ef4271acb67a252c5b72375e90891034#5a214f49ef4271acb67a252c5b72375e90891034"
+source = "git+https://github.com/LioRael/lenso-usage-billing-plugin?rev=139874ae67f3c4ba1d8df04a0e793f1c5613a733#139874ae67f3c4ba1d8df04a0e793f1c5613a733"
 dependencies = [
  "futures",
  "lenso-contract-codegen 0.6.3",
