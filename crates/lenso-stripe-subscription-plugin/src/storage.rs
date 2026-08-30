@@ -282,6 +282,205 @@ fn decode_effect(row: &sqlx::postgres::PgRow) -> Result<EffectRecord, StoreError
     })
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct NewMeterEffect {
+    pub(crate) delivery_id: String,
+    pub(crate) caller_instance: String,
+    pub(crate) request_hash: Vec<u8>,
+    pub(crate) scope_kind: String,
+    pub(crate) scope_id: String,
+    pub(crate) subject: String,
+    pub(crate) meter_alias: String,
+    pub(crate) stripe_event_name: String,
+    pub(crate) quantity: String,
+    pub(crate) occurred_at: OffsetDateTime,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct MeterEffectRecord {
+    pub(crate) delivery_id: String,
+    pub(crate) caller_instance: String,
+    pub(crate) request_hash: Vec<u8>,
+    pub(crate) status: EffectStatus,
+    pub(crate) provider_reference: Option<String>,
+    pub(crate) failure_code: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum MeterEffectClaim {
+    Dispatch(MeterEffectRecord),
+    Existing(MeterEffectRecord),
+    Conflict,
+}
+
+pub(crate) async fn recover_stranded_meter_effects(
+    postgres: &OwnedPostgres,
+    uncertainty_seconds: i64,
+) -> Result<u64, StoreError> {
+    Ok(sqlx::query(
+        "UPDATE stripe_meter_effects SET status='effect_unknown',updated_at=transaction_timestamp() WHERE status='in_flight' AND updated_at <= transaction_timestamp()-make_interval(secs => $1::double precision)",
+    )
+    .bind(uncertainty_seconds)
+    .execute(postgres.pool())
+    .await?
+    .rows_affected())
+}
+
+pub(crate) async fn load_billing_customer(
+    postgres: &OwnedPostgres,
+    scope_kind: &str,
+    scope_id: &str,
+    subject: &str,
+) -> Result<Option<String>, StoreError> {
+    Ok(sqlx::query_scalar(
+        "SELECT stripe_customer_id FROM stripe_billing_subjects WHERE scope_kind=$1 AND scope_id=$2 AND subject=$3",
+    )
+    .bind(scope_kind)
+    .bind(scope_id)
+    .bind(subject)
+    .fetch_optional(postgres.pool())
+    .await?)
+}
+
+pub(crate) async fn claim_meter_effect(
+    postgres: &OwnedPostgres,
+    effect: &NewMeterEffect,
+    uncertainty_seconds: i64,
+) -> Result<MeterEffectClaim, StoreError> {
+    let inserted = sqlx::query(
+        "INSERT INTO stripe_meter_effects(delivery_id,caller_instance,request_hash,scope_kind,scope_id,subject,meter_alias,stripe_event_name,quantity,occurred_at,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'prepared') ON CONFLICT(delivery_id) DO NOTHING RETURNING delivery_id",
+    )
+    .bind(&effect.delivery_id)
+    .bind(&effect.caller_instance)
+    .bind(&effect.request_hash)
+    .bind(&effect.scope_kind)
+    .bind(&effect.scope_id)
+    .bind(&effect.subject)
+    .bind(&effect.meter_alias)
+    .bind(&effect.stripe_event_name)
+    .bind(&effect.quantity)
+    .bind(effect.occurred_at)
+    .fetch_optional(postgres.pool())
+    .await?
+    .is_some();
+
+    let row = sqlx::query(
+        "SELECT delivery_id,caller_instance,request_hash,status,provider_reference,failure_code FROM stripe_meter_effects WHERE delivery_id=$1",
+    )
+    .bind(&effect.delivery_id)
+    .fetch_one(postgres.pool())
+    .await?;
+    let mut record = decode_meter_effect(&row)?;
+    if record.caller_instance != effect.caller_instance
+        || record.request_hash != effect.request_hash
+    {
+        return Ok(MeterEffectClaim::Conflict);
+    }
+    if !inserted && record.status == EffectStatus::InFlight {
+        let recovered = sqlx::query(
+            "UPDATE stripe_meter_effects SET status='effect_unknown',updated_at=transaction_timestamp() WHERE delivery_id=$1 AND status='in_flight' AND updated_at <= transaction_timestamp()-make_interval(secs => $2::double precision)",
+        )
+        .bind(&record.delivery_id)
+        .bind(uncertainty_seconds)
+        .execute(postgres.pool())
+        .await?
+        .rows_affected();
+        if recovered == 1 {
+            record.status = EffectStatus::EffectUnknown;
+        }
+    }
+    if !inserted && record.status != EffectStatus::Prepared {
+        return Ok(MeterEffectClaim::Existing(record));
+    }
+    let changed = sqlx::query(
+        "UPDATE stripe_meter_effects SET status='in_flight',updated_at=transaction_timestamp() WHERE delivery_id=$1 AND status='prepared'",
+    )
+    .bind(&record.delivery_id)
+    .execute(postgres.pool())
+    .await?
+    .rows_affected();
+    if changed != 1 {
+        let current = load_meter_effect(postgres, &record.delivery_id)
+            .await?
+            .ok_or_else(|| StoreError::Invariant("Stripe meter effect disappeared".to_owned()))?;
+        return Ok(MeterEffectClaim::Existing(current));
+    }
+    record.status = EffectStatus::InFlight;
+    Ok(MeterEffectClaim::Dispatch(record))
+}
+
+pub(crate) async fn load_meter_effect(
+    postgres: &OwnedPostgres,
+    delivery_id: &str,
+) -> Result<Option<MeterEffectRecord>, StoreError> {
+    sqlx::query(
+        "SELECT delivery_id,caller_instance,request_hash,status,provider_reference,failure_code FROM stripe_meter_effects WHERE delivery_id=$1",
+    )
+    .bind(delivery_id)
+    .fetch_optional(postgres.pool())
+    .await?
+    .as_ref()
+    .map(decode_meter_effect)
+    .transpose()
+}
+
+pub(crate) async fn accept_meter_effect(
+    postgres: &OwnedPostgres,
+    delivery_id: &str,
+    provider_reference: &str,
+) -> Result<bool, StoreError> {
+    Ok(sqlx::query(
+        "UPDATE stripe_meter_effects SET status='accepted',provider_reference=$2,failure_code=NULL,updated_at=transaction_timestamp(),completed_at=transaction_timestamp() WHERE delivery_id=$1 AND status='in_flight'",
+    )
+    .bind(delivery_id)
+    .bind(provider_reference)
+    .execute(postgres.pool())
+    .await?
+    .rows_affected()
+        == 1)
+}
+
+pub(crate) async fn fail_meter_effect(
+    postgres: &OwnedPostgres,
+    delivery_id: &str,
+    failure_code: &str,
+) -> Result<bool, StoreError> {
+    Ok(sqlx::query(
+        "UPDATE stripe_meter_effects SET status='known_failure',provider_reference=NULL,failure_code=$2,updated_at=transaction_timestamp(),completed_at=transaction_timestamp() WHERE delivery_id=$1 AND status='in_flight'",
+    )
+    .bind(delivery_id)
+    .bind(failure_code)
+    .execute(postgres.pool())
+    .await?
+    .rows_affected()
+        == 1)
+}
+
+pub(crate) async fn mark_meter_effect_unknown(
+    postgres: &OwnedPostgres,
+    delivery_id: &str,
+) -> Result<bool, StoreError> {
+    Ok(sqlx::query(
+        "UPDATE stripe_meter_effects SET status='effect_unknown',updated_at=transaction_timestamp() WHERE delivery_id=$1 AND status='in_flight'",
+    )
+    .bind(delivery_id)
+    .execute(postgres.pool())
+    .await?
+    .rows_affected()
+        == 1)
+}
+
+fn decode_meter_effect(row: &sqlx::postgres::PgRow) -> Result<MeterEffectRecord, StoreError> {
+    Ok(MeterEffectRecord {
+        delivery_id: row.try_get("delivery_id")?,
+        caller_instance: row.try_get("caller_instance")?,
+        request_hash: row.try_get("request_hash")?,
+        status: EffectStatus::parse(row.try_get("status")?)?,
+        provider_reference: row.try_get("provider_reference")?,
+        failure_code: row.try_get("failure_code")?,
+    })
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum WebhookRecordOutcome {
     Created,

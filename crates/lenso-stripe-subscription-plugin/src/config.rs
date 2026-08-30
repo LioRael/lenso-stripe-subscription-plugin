@@ -25,6 +25,14 @@ pub struct EntitlementMapping {
     pub limit: Option<String>,
 }
 
+/// One provider-neutral usage meter alias mapped to a Stripe meter event name.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MeterMapping {
+    pub alias: String,
+    pub event_name: String,
+}
+
 /// Immutable authority, Stripe endpoint, and product mapping for one Instance.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -42,7 +50,9 @@ pub struct StripeSubscriptionConfig {
     effect_uncertainty_seconds: i64,
     redirect_origins: Vec<String>,
     prices: Vec<PriceMapping>,
+    meters: Vec<MeterMapping>,
     product_instances: Vec<String>,
+    meter_instances: Vec<String>,
     webhook_instances: Vec<String>,
     worker_instances: Vec<String>,
     operator_instances: Vec<String>,
@@ -64,7 +74,9 @@ impl StripeSubscriptionConfig {
         effect_uncertainty_seconds: i64,
         redirect_origins: Vec<String>,
         prices: Vec<PriceMapping>,
+        meters: Vec<MeterMapping>,
         product_instances: Vec<String>,
+        meter_instances: Vec<String>,
         webhook_instances: Vec<String>,
         worker_instances: Vec<String>,
         operator_instances: Vec<String>,
@@ -83,7 +95,9 @@ impl StripeSubscriptionConfig {
             effect_uncertainty_seconds,
             redirect_origins,
             prices,
+            meters,
             product_instances,
+            meter_instances,
             webhook_instances,
             worker_instances,
             operator_instances,
@@ -125,13 +139,16 @@ impl StripeSubscriptionConfig {
         }
         validate_origins(&self.redirect_origins)?;
         validate_prices(&self.prices)?;
+        validate_meters(&self.meters)?;
         validate_callers(&self.product_instances, "product")?;
+        validate_callers(&self.meter_instances, "meter")?;
         validate_callers(&self.webhook_instances, "webhook")?;
         validate_callers(&self.worker_instances, "worker")?;
         validate_callers(&self.operator_instances, "operator")?;
         let all_callers = self
             .product_instances
             .iter()
+            .chain(&self.meter_instances)
             .chain(&self.webhook_instances)
             .chain(&self.worker_instances)
             .chain(&self.operator_instances)
@@ -150,12 +167,20 @@ impl StripeSubscriptionConfig {
         self.prices.iter().find(|price| price.price_id == price_id)
     }
 
+    pub(crate) fn meter(&self, alias: &str) -> Option<&MeterMapping> {
+        self.meters.iter().find(|meter| meter.alias == alias)
+    }
+
     pub(crate) fn redirect_allowed(&self, value: &str) -> bool {
         redirect_origin(value).is_ok_and(|origin| self.redirect_origins.contains(&origin))
     }
 
     pub(crate) fn product_allowed(&self, caller: Option<&str>) -> bool {
         allowed(&self.product_instances, caller)
+    }
+
+    pub(crate) fn meter_allowed(&self, caller: Option<&str>) -> bool {
+        allowed(&self.meter_instances, caller)
     }
 
     pub(crate) fn webhook_allowed(&self, caller: Option<&str>) -> bool {
@@ -290,6 +315,33 @@ fn validate_prices(values: &[PriceMapping]) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_meters(values: &[MeterMapping]) -> Result<(), String> {
+    if values.is_empty() || values.len() > 256 {
+        return Err("between one and 256 meter mappings are required".to_owned());
+    }
+    if values.iter().any(|meter| {
+        !valid_name(&meter.alias) || !valid_name(&meter.event_name) || meter.event_name.len() > 100
+    }) {
+        return Err("meter aliases and Stripe event names are invalid".to_owned());
+    }
+    if values
+        .iter()
+        .map(|meter| &meter.alias)
+        .collect::<BTreeSet<_>>()
+        .len()
+        != values.len()
+        || values
+            .iter()
+            .map(|meter| &meter.event_name)
+            .collect::<BTreeSet<_>>()
+            .len()
+            != values.len()
+    {
+        return Err("meter aliases and Stripe event names must be unique".to_owned());
+    }
+    Ok(())
+}
+
 fn fixed_api_base(value: &str) -> Result<Url, String> {
     let url = Url::parse(value).map_err(|_| "api_base_url is invalid".to_owned())?;
     if url.scheme() != "https"
@@ -349,7 +401,7 @@ fn valid_secret_reference(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{EntitlementMapping, PriceMapping, StripeSubscriptionConfig};
+    use super::{EntitlementMapping, MeterMapping, PriceMapping, StripeSubscriptionConfig};
     use crate::STRIPE_API_VERSION;
 
     fn config() -> StripeSubscriptionConfig {
@@ -374,7 +426,12 @@ mod tests {
                     limit: None,
                 }],
             }],
+            vec![MeterMapping {
+                alias: "api.requests".to_owned(),
+                event_name: "api_requests".to_owned(),
+            }],
             vec!["billing-ui".to_owned()],
+            vec!["usage-billing-worker".to_owned()],
             vec!["stripe-ingress".to_owned()],
             vec!["stripe-worker".to_owned()],
             vec!["billing-operator".to_owned()],
@@ -389,12 +446,17 @@ mod tests {
         assert!(policy.redirect_allowed("https://app.example.test/billing/success?session=1"));
         assert!(!policy.redirect_allowed("https://evil.example.test/return"));
         assert_eq!(policy.price("pro").unwrap().price_id, "price_test123");
+        assert_eq!(
+            policy.meter("api.requests").unwrap().event_name,
+            "api_requests"
+        );
     }
 
     #[test]
     fn authority_and_secret_roles_are_separate() {
         let policy = config();
         assert!(policy.product_allowed(Some("billing-ui")));
+        assert!(policy.meter_allowed(Some("usage-billing-worker")));
         assert!(policy.webhook_allowed(Some("stripe-ingress")));
         assert!(policy.worker_allowed(Some("stripe-worker")));
         assert!(policy.operator_allowed(Some("billing-operator")));
@@ -402,6 +464,10 @@ mod tests {
 
         let mut invalid = policy.clone();
         invalid.operator_instances = vec!["billing-ui".to_owned()];
+        assert!(invalid.validate().is_err());
+
+        let mut invalid = policy.clone();
+        invalid.meter_instances = vec!["billing-ui".to_owned()];
         assert!(invalid.validate().is_err());
 
         let mut invalid = policy;

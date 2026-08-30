@@ -754,6 +754,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-capability-billing-meter-sink"
+version = "0.1.0"
+source = "git+https://github.com/LioRael/lenso-usage-billing-plugin?rev=5a214f49ef4271acb67a252c5b72375e90891034#5a214f49ef4271acb67a252c5b72375e90891034"
+dependencies = [
+ "futures",
+ "lenso-contract-codegen 0.6.3",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lenso-capability-entitlements-admin"
 version = "0.1.0"
 source = "git+https://github.com/LioRael/lenso-entitlements-plugin?rev=bc953a0c6de9aefe5489f7c7e3ef2d215cc25c13#bc953a0c6de9aefe5489f7c7e3ef2d215cc25c13"
@@ -953,6 +967,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hmac 0.12.1",
  "lenso",
+ "lenso-capability-billing-meter-sink",
  "lenso-capability-entitlements-admin",
  "lenso-capability-http-client",
  "lenso-capability-secrets",
@@ -2242,7 +2257,3 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
-
-[[patch.unused]]
-name = "lenso-capability-entitlements-admin"
-version = "0.1.0"

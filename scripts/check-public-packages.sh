@@ -52,6 +52,15 @@ if [[ -z "$entitlements_source" ]]; then
     bc953a0c6de9aefe5489f7c7e3ef2d215cc25c13
   entitlements_source="$entitlements_checkout/crates/lenso-capability-entitlements-admin"
 fi
+meter_source="${LENSO_BILLING_METER_SINK_SOURCE:-}"
+if [[ -z "$meter_source" ]]; then
+  usage_billing_checkout="$verification_root/usage-billing"
+  git clone --quiet --filter=blob:none --no-checkout \
+    https://github.com/LioRael/lenso-usage-billing-plugin "$usage_billing_checkout"
+  git -C "$usage_billing_checkout" checkout --quiet --detach \
+    5a214f49ef4271acb67a252c5b72375e90891034
+  meter_source="$usage_billing_checkout/crates/lenso-capability-billing-meter-sink"
+fi
 entitlements_root="$(git -C "$entitlements_source" rev-parse --show-toplevel)"
 entitlements_metadata="$("$cargo_bin" metadata --manifest-path "$entitlements_root/Cargo.toml" --no-deps --format-version=1)"
 entitlements_target="$(python3 -c \
@@ -63,10 +72,22 @@ entitlements_version="$(python3 -c \
 "$cargo_bin" package --quiet --locked \
   --manifest-path "$entitlements_root/Cargo.toml" \
   -p lenso-capability-entitlements-admin
+meter_root="$(git -C "$meter_source" rev-parse --show-toplevel)"
+meter_metadata="$("$cargo_bin" metadata --manifest-path "$meter_root/Cargo.toml" --no-deps --format-version=1)"
+meter_target="$(python3 -c \
+  'import json, sys; print(json.load(sys.stdin)["target_directory"])' \
+  <<<"$meter_metadata")"
+meter_version="$(python3 -c \
+  'import json, sys; name = sys.argv[1]; print(next(package["version"] for package in json.load(sys.stdin)["packages"] if package["name"] == name))' \
+  lenso-capability-billing-meter-sink <<<"$meter_metadata")"
+"$cargo_bin" package --quiet --locked \
+  --manifest-path "$meter_root/Cargo.toml" \
+  -p lenso-capability-billing-meter-sink
 
 subscription_source_patch="patch.crates-io.lenso-capability-stripe-subscription.path=\"$subscription_source\""
 admin_source_patch="patch.crates-io.lenso-capability-stripe-subscription-admin.path=\"$admin_source\""
 entitlements_source_patch="patch.crates-io.lenso-capability-entitlements-admin.path=\"$entitlements_source\""
+meter_source_patch="patch.crates-io.lenso-capability-billing-meter-sink.path=\"$meter_source\""
 
 # Build the archive with every not-yet-published Capability supplied explicitly.
 # Verification happens below against only the normalized archive contents.
@@ -74,51 +95,61 @@ entitlements_source_patch="patch.crates-io.lenso-capability-entitlements-admin.p
   --config "$subscription_source_patch" \
   --config "$admin_source_patch" \
   --config "$entitlements_source_patch" \
+  --config "$meter_source_patch" \
   package --quiet "${plugin_package_flags[@]}" --no-verify \
   -p lenso-stripe-subscription-plugin
 
 subscription_archive="$target_directory/package/lenso-capability-stripe-subscription-$subscription_version.crate"
 admin_archive="$target_directory/package/lenso-capability-stripe-subscription-admin-$admin_version.crate"
 entitlements_archive="$entitlements_target/package/lenso-capability-entitlements-admin-$entitlements_version.crate"
+meter_archive="$meter_target/package/lenso-capability-billing-meter-sink-$meter_version.crate"
 plugin_archive="$target_directory/package/lenso-stripe-subscription-plugin-$plugin_version.crate"
 
 tar -xzf "$subscription_archive" -C "$verification_root"
 tar -xzf "$admin_archive" -C "$verification_root"
 tar -xzf "$entitlements_archive" -C "$verification_root"
+tar -xzf "$meter_archive" -C "$verification_root"
 tar -xzf "$plugin_archive" -C "$verification_root"
 
 subscription_package="$verification_root/lenso-capability-stripe-subscription-$subscription_version"
 admin_package="$verification_root/lenso-capability-stripe-subscription-admin-$admin_version"
 entitlements_package="$verification_root/lenso-capability-entitlements-admin-$entitlements_version"
+meter_package="$verification_root/lenso-capability-billing-meter-sink-$meter_version"
 plugin_package="$verification_root/lenso-stripe-subscription-plugin-$plugin_version"
 
 [[ -f "$subscription_package/Cargo.toml" ]]
 [[ -f "$admin_package/Cargo.toml" ]]
 [[ -f "$entitlements_package/Cargo.toml" ]]
+[[ -f "$meter_package/Cargo.toml" ]]
 [[ -f "$plugin_package/Cargo.toml" ]]
 
 subscription_package_patch="patch.crates-io.lenso-capability-stripe-subscription.path=\"$subscription_package\""
 admin_package_patch="patch.crates-io.lenso-capability-stripe-subscription-admin.path=\"$admin_package\""
 entitlements_package_patch="patch.crates-io.lenso-capability-entitlements-admin.path=\"$entitlements_package\""
+meter_package_patch="patch.crates-io.lenso-capability-billing-meter-sink.path=\"$meter_package\""
 plugin_manifest="$plugin_package/Cargo.toml"
 
 "$cargo_bin" \
   --config "$subscription_package_patch" \
   --config "$admin_package_patch" \
   --config "$entitlements_package_patch" \
+  --config "$meter_package_patch" \
   generate-lockfile --manifest-path "$plugin_manifest"
 "$cargo_bin" \
   --config "$subscription_package_patch" \
   --config "$admin_package_patch" \
   --config "$entitlements_package_patch" \
+  --config "$meter_package_patch" \
   check --quiet --locked --all-targets --manifest-path "$plugin_manifest"
 "$cargo_bin" \
   --config "$subscription_package_patch" \
   --config "$admin_package_patch" \
   --config "$entitlements_package_patch" \
+  --config "$meter_package_patch" \
   test --quiet --locked --manifest-path "$plugin_manifest"
 "$cargo_bin" clippy \
   --config "$subscription_package_patch" \
   --config "$admin_package_patch" \
   --config "$entitlements_package_patch" \
+  --config "$meter_package_patch" \
   --quiet --locked --all-targets --manifest-path "$plugin_manifest" -- -D warnings
