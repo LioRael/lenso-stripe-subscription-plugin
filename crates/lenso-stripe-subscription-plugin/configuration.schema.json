@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "database_url_secret",
+    "stripe_api_key_secret",
+    "webhook_signing_secret",
+    "receipt_encryption_secret",
+    "api_base_url",
+    "livemode",
+    "signature_tolerance_seconds",
+    "max_webhook_body_bytes",
+    "reconciliation_lease_seconds",
+    "effect_uncertainty_seconds",
+    "redirect_origins",
+    "prices",
+    "product_instances",
+    "webhook_instances",
+    "worker_instances",
+    "operator_instances"
+  ],
+  "properties": {
+    "schema": { "type": "string", "minLength": 1, "maxLength": 63 },
+    "database_url_secret": { "$ref": "#/$defs/reference" },
+    "stripe_api_key_secret": { "$ref": "#/$defs/reference" },
+    "webhook_signing_secret": { "$ref": "#/$defs/reference" },
+    "receipt_encryption_secret": { "$ref": "#/$defs/reference" },
+    "api_base_url": { "type": "string", "format": "uri" },
+    "livemode": { "type": "boolean" },
+    "signature_tolerance_seconds": { "type": "integer", "minimum": 60, "maximum": 900 },
+    "max_webhook_body_bytes": { "type": "integer", "minimum": 1024, "maximum": 1048576 },
+    "reconciliation_lease_seconds": { "type": "integer", "minimum": 5, "maximum": 3600 },
+    "effect_uncertainty_seconds": { "type": "integer", "minimum": 30, "maximum": 3600 },
+    "redirect_origins": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "type": "string", "format": "uri" }
+    },
+    "prices": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["alias", "price_id", "entitlements"],
+        "properties": {
+          "alias": { "$ref": "#/$defs/name" },
+          "price_id": { "type": "string", "pattern": "^price_[A-Za-z0-9_]+$", "maxLength": 256 },
+          "entitlements": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["feature", "limit"],
+              "properties": {
+                "feature": { "$ref": "#/$defs/name" },
+                "limit": { "type": ["string", "null"], "pattern": "^[1-9][0-9]*$" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "product_instances": { "$ref": "#/$defs/callers" },
+    "webhook_instances": { "$ref": "#/$defs/callers" },
+    "worker_instances": { "$ref": "#/$defs/callers" },
+    "operator_instances": { "$ref": "#/$defs/callers" }
+  },
+  "$defs": {
+    "reference": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9._:-]+$" },
+    "callers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/name" }
+    }
+  }
+}

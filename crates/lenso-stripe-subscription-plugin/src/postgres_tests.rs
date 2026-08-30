@@ -1,8 +1,17 @@
 use lenso_postgres_kit::OwnedPostgres;
+use sha2::{Digest, Sha256};
 use sqlx::{AssertSqlSafe, Executor as _};
+use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{StripeSubscriptionOperator, schema};
+use crate::{
+    StripeSubscriptionOperator, schema,
+    storage::{
+        self, CanonicalState, EffectClaim, EffectOperation, EffectStatus, NewEffect,
+        WebhookRecordOutcome,
+    },
+    webhook::{CheckoutSubject, ReconciliationTarget, VerifiedEvent},
+};
 
 #[tokio::test]
 async fn schema_restart_and_effect_constraints_are_postgres_durable() {
@@ -50,6 +59,142 @@ async fn schema_restart_and_effect_constraints_are_postgres_durable() {
         invalid_effect.is_err(),
         "accepted effects require an encrypted receipt"
     );
+
+    let effect = NewEffect {
+        effect_id: "stripe_effect_00000000000000000000000000000001".to_owned(),
+        caller_instance: "billing-ui".to_owned(),
+        operation: EffectOperation::Checkout,
+        idempotency_key: "checkout-1".to_owned(),
+        request_hash: Sha256::digest(b"request-one").to_vec(),
+        scope_kind: "organization".to_owned(),
+        scope_id: "org_1".to_owned(),
+        subject: "org_1".to_owned(),
+        price_alias: Some("pro".to_owned()),
+    };
+    assert!(matches!(
+        storage::claim_effect(&postgres, &effect, 120)
+            .await
+            .unwrap(),
+        EffectClaim::Dispatch(_)
+    ));
+    assert!(matches!(
+        storage::claim_effect(&postgres, &effect, 120)
+            .await
+            .unwrap(),
+        EffectClaim::Existing(_)
+    ));
+    assert_eq!(
+        storage::recover_stranded_effects(&postgres, 120)
+            .await
+            .unwrap(),
+        0,
+        "a rolling activation must not invalidate a live dispatch"
+    );
+    let mut conflicting = effect.clone();
+    conflicting.request_hash = Sha256::digest(b"request-two").to_vec();
+    assert!(matches!(
+        storage::claim_effect(&postgres, &conflicting, 120)
+            .await
+            .unwrap(),
+        EffectClaim::Conflict
+    ));
+    sqlx::query(
+        "UPDATE stripe_effects SET updated_at=transaction_timestamp()-interval '121 seconds' WHERE effect_id=$1",
+    )
+    .bind(&effect.effect_id)
+    .execute(postgres.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        storage::recover_stranded_effects(&postgres, 120)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        storage::load_effect(&postgres, &effect.effect_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        EffectStatus::EffectUnknown
+    );
+
+    let event = VerifiedEvent {
+        event_id: "evt_checkout_1".to_owned(),
+        event_type: "checkout.session.completed".to_owned(),
+        created_at: OffsetDateTime::now_utc().unix_timestamp(),
+        livemode: false,
+        target: Some(ReconciliationTarget {
+            subscription_id: "sub_1".to_owned(),
+            customer_id: "cus_1".to_owned(),
+            checkout_subject: Some(CheckoutSubject {
+                scope_kind: "organization".to_owned(),
+                scope_id: "org_1".to_owned(),
+                subject: "org_1".to_owned(),
+                price_alias: "pro".to_owned(),
+            }),
+        }),
+    };
+    let payload_hash = Sha256::digest(b"signed raw body");
+    assert_eq!(
+        storage::record_webhook(&postgres, &event, &payload_hash)
+            .await
+            .unwrap(),
+        WebhookRecordOutcome::Created
+    );
+    assert_eq!(
+        storage::record_webhook(&postgres, &event, &payload_hash)
+            .await
+            .unwrap(),
+        WebhookRecordOutcome::Duplicate
+    );
+    assert!(
+        storage::record_webhook(&postgres, &event, &Sha256::digest(b"different body"))
+            .await
+            .is_err(),
+        "one Stripe event id cannot be rebound to different bytes"
+    );
+
+    let (first, second) = tokio::join!(
+        storage::claim_reconciliation(&postgres, "worker-a", &[1; 32], 30),
+        storage::claim_reconciliation(&postgres, "worker-b", &[2; 32], 30)
+    );
+    let claims = [first.unwrap(), second.unwrap()];
+    assert_eq!(claims.iter().filter(|claim| claim.is_some()).count(), 1);
+    let claim = claims.into_iter().flatten().next().unwrap();
+    assert!(
+        storage::retry_reconciliation(&postgres, &claim, "retry-test")
+            .await
+            .unwrap()
+    );
+    let claim = storage::claim_reconciliation(&postgres, "worker-a", &[3; 32], 30)
+        .await
+        .unwrap()
+        .unwrap();
+    let revision = storage::converge_reconciliation(
+        &postgres,
+        &claim,
+        &CanonicalState {
+            subscription_id: "sub_1",
+            customer_id: "cus_1",
+            price_alias: Some("pro"),
+            status: "active",
+            cancel_at_period_end: false,
+            current_period_end: Some(OffsetDateTime::now_utc()),
+            entitlement_state: "granted",
+        },
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(revision > 0);
+    let subject = storage::load_subject(&postgres, "organization", "org_1", "org_1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(subject.subscription_status, "active");
+    assert_eq!(subject.subscription_id.as_deref(), Some("sub_1"));
 
     postgres.pool().close().await;
     let restarted = OwnedPostgres::prepare(

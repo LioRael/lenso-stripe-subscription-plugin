@@ -20,8 +20,13 @@ postgres-acceptance = []
 aes-gcm.workspace = true
 getrandom.workspace = true
 hmac.workspace = true
+lenso.workspace = true
+lenso-capability-entitlements-admin.workspace = true
+lenso-capability-http-client.workspace = true
+lenso-capability-secrets.workspace = true
 lenso-capability-stripe-subscription = { path = "../lenso-capability-stripe-subscription", version = "0.1.0" }
 lenso-capability-stripe-subscription-admin = { path = "../lenso-capability-stripe-subscription-admin", version = "0.1.0" }
+lenso-kernel.workspace = true
 lenso-postgres-kit.workspace = true
 serde.workspace = true
 serde_json.workspace = true

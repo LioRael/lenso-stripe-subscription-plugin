@@ -221,6 +221,7 @@ fn decode_hex(value: &str) -> Result<Vec<u8>, WebhookError> {
         .collect()
 }
 
+#[cfg(test)]
 fn encode_hex(value: &[u8]) -> String {
     const ALPHABET: &[u8; 16] = b"0123456789abcdef";
     let mut encoded = String::with_capacity(value.len() * 2);

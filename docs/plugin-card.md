@@ -21,7 +21,7 @@ canonical Subscription and converges the matching Lenso entitlements.
   - `reconcile_next`
   - `inspect_effect`
   - `resolve_unknown_effect`
-- Requires `lenso.secrets@1`, `lenso.http-client@1`, and
+- Requires `lenso.secrets@1`, `lenso.http.client@1`, and
   `lenso.entitlements-admin@1`.
 
 The webhook ingress adapter is outside this Plugin and receives no billing
@@ -55,6 +55,9 @@ transport failure, malformed success response, or process loss after dispatch
 is ambiguous and becomes `effect_unknown`. Exact retries return the durable
 state; they never silently choose a new key. Only a separately authorized
 operator can resolve an unknown effect after correlating Stripe's request log.
+The configured uncertainty window must exceed the bound HTTP Client timeout;
+only an `in_flight` row older than that window is recovered after a process
+loss, so rolling activation cannot invalidate another live dispatch.
 
 ## Webhook and reconciliation boundary
 
@@ -68,10 +71,16 @@ Stripe does not guarantee delivery order. Subscription-related events enqueue a
 deduplicated reconciliation key instead of directly granting access from the
 event snapshot. `reconcile_next` fetches the current Stripe Subscription,
 persists its canonical status, and applies configured entitlement mappings.
-`active` and `trialing` may grant; all other statuses converge to revoked unless
-an explicit mapping says otherwise. Entitlement put/revoke operations are
-naturally repeatable, and the reconciliation row is terminal only after the
-remote Capability call succeeds.
+`active` and `trialing` grant configured features; every other status revokes
+them. An unknown Price mapping also revokes existing bindings and records a
+failed entitlement projection. Entitlement put/revoke operations are naturally
+repeatable, and the reconciliation row is terminal only after the remote
+Capability call and fenced PostgreSQL update succeed.
+
+Each reconciliation uses a PostgreSQL lease token. Expired work may be claimed
+by another worker, while a stale worker cannot mark the row converged. Partial
+Entitlements failures return the row to `pending` with a bounded failure code;
+they never publish a false converged state.
 
 ## Deletion boundary
 
@@ -81,4 +90,3 @@ The operator removes the private PostgreSQL schema only after the application's
 billing-retention policy permits it. Existing Stripe subscriptions remain
 external resources and require an explicit business migration or cancellation
 plan.
-

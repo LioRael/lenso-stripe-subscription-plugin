@@ -5,7 +5,6 @@ use url::Url;
 
 use crate::schema::schema_plan;
 
-pub(crate) const STRIPE_API_VERSION: &str = "2026-02-25.clover";
 const MAX_REFERENCE_BYTES: usize = 256;
 const MAX_WEBHOOK_BODY_BYTES: usize = 1_048_576;
 
@@ -40,6 +39,7 @@ pub struct StripeSubscriptionConfig {
     signature_tolerance_seconds: i64,
     max_webhook_body_bytes: usize,
     reconciliation_lease_seconds: i64,
+    effect_uncertainty_seconds: i64,
     redirect_origins: Vec<String>,
     prices: Vec<PriceMapping>,
     product_instances: Vec<String>,
@@ -61,6 +61,7 @@ impl StripeSubscriptionConfig {
         signature_tolerance_seconds: i64,
         max_webhook_body_bytes: usize,
         reconciliation_lease_seconds: i64,
+        effect_uncertainty_seconds: i64,
         redirect_origins: Vec<String>,
         prices: Vec<PriceMapping>,
         product_instances: Vec<String>,
@@ -79,6 +80,7 @@ impl StripeSubscriptionConfig {
             signature_tolerance_seconds,
             max_webhook_body_bytes,
             reconciliation_lease_seconds,
+            effect_uncertainty_seconds,
             redirect_origins,
             prices,
             product_instances,
@@ -118,6 +120,9 @@ impl StripeSubscriptionConfig {
         if !(5..=3_600).contains(&self.reconciliation_lease_seconds) {
             return Err("reconciliation_lease_seconds must be between 5 and 3600".to_owned());
         }
+        if !(30..=3_600).contains(&self.effect_uncertainty_seconds) {
+            return Err("effect_uncertainty_seconds must be between 30 and 3600".to_owned());
+        }
         validate_origins(&self.redirect_origins)?;
         validate_prices(&self.prices)?;
         validate_callers(&self.product_instances, "product")?;
@@ -139,6 +144,10 @@ impl StripeSubscriptionConfig {
 
     pub(crate) fn price(&self, alias: &str) -> Option<&PriceMapping> {
         self.prices.iter().find(|price| price.alias == alias)
+    }
+
+    pub(crate) fn price_by_id(&self, price_id: &str) -> Option<&PriceMapping> {
+        self.prices.iter().find(|price| price.price_id == price_id)
     }
 
     pub(crate) fn redirect_allowed(&self, value: &str) -> bool {
@@ -199,6 +208,10 @@ impl StripeSubscriptionConfig {
 
     pub(crate) const fn reconciliation_lease_seconds(&self) -> i64 {
         self.reconciliation_lease_seconds
+    }
+
+    pub(crate) const fn effect_uncertainty_seconds(&self) -> i64 {
+        self.effect_uncertainty_seconds
     }
 }
 
@@ -280,14 +293,14 @@ fn validate_prices(values: &[PriceMapping]) -> Result<(), String> {
 fn fixed_api_base(value: &str) -> Result<Url, String> {
     let url = Url::parse(value).map_err(|_| "api_base_url is invalid".to_owned())?;
     if url.scheme() != "https"
-        || url.host_str().is_none()
+        || url.host_str() != Some("api.stripe.com")
         || !url.username().is_empty()
         || url.password().is_some()
         || url.path() != "/"
         || url.query().is_some()
         || url.fragment().is_some()
     {
-        return Err("api_base_url must be one HTTPS origin without credentials".to_owned());
+        return Err("api_base_url must be the api.stripe.com HTTPS origin".to_owned());
     }
     Ok(url)
 }
@@ -304,7 +317,7 @@ fn redirect_origin(value: &str) -> Result<String, String> {
     Ok(url.origin().ascii_serialization())
 }
 
-fn valid_name(value: &str) -> bool {
+pub(crate) fn valid_name(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= MAX_REFERENCE_BYTES
         && value
@@ -312,7 +325,7 @@ fn valid_name(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b':'))
 }
 
-fn valid_stripe_id(value: &str, prefix: &str) -> bool {
+pub(crate) fn valid_stripe_id(value: &str, prefix: &str) -> bool {
     value.starts_with(prefix)
         && value.len() <= MAX_REFERENCE_BYTES
         && value
@@ -336,7 +349,8 @@ fn valid_secret_reference(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{EntitlementMapping, PriceMapping, STRIPE_API_VERSION, StripeSubscriptionConfig};
+    use super::{EntitlementMapping, PriceMapping, StripeSubscriptionConfig};
+    use crate::STRIPE_API_VERSION;
 
     fn config() -> StripeSubscriptionConfig {
         StripeSubscriptionConfig::new(
@@ -350,6 +364,7 @@ mod tests {
             300,
             262_144,
             30,
+            120,
             vec!["https://app.example.test".to_owned()],
             vec![PriceMapping {
                 alias: "pro".to_owned(),
@@ -398,6 +413,10 @@ mod tests {
     fn price_and_endpoint_policy_fail_closed() {
         let mut invalid = config();
         invalid.api_base_url = "http://api.stripe.com".to_owned();
+        assert!(invalid.validate().is_err());
+
+        let mut invalid = config();
+        invalid.api_base_url = "https://stripe-proxy.example.test".to_owned();
         assert!(invalid.validate().is_err());
 
         let mut invalid = config();
