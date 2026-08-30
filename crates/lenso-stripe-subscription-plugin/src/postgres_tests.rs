@@ -7,8 +7,8 @@ use uuid::Uuid;
 use crate::{
     StripeSubscriptionOperator, schema,
     storage::{
-        self, CanonicalState, EffectClaim, EffectOperation, EffectStatus, NewEffect,
-        WebhookRecordOutcome,
+        self, CanonicalState, EffectClaim, EffectOperation, EffectStatus, MeterEffectClaim,
+        NewEffect, NewMeterEffect, WebhookRecordOutcome,
     },
     webhook::{CheckoutSubject, ReconciliationTarget, VerifiedEvent},
 };
@@ -123,6 +123,52 @@ async fn assert_effect_idempotency_and_uncertainty(postgres: &OwnedPostgres) {
             .status,
         EffectStatus::EffectUnknown
     );
+}
+
+async fn assert_meter_idempotency_and_receipt(postgres: &OwnedPostgres) {
+    let effect = NewMeterEffect {
+        delivery_id: "usage_delivery_00000000000000000000000000000001".to_owned(),
+        caller_instance: "usage-billing-worker".to_owned(),
+        request_hash: Sha256::digest(b"meter-request-one").to_vec(),
+        scope_kind: "organization".to_owned(),
+        scope_id: "org_1".to_owned(),
+        subject: "org_1".to_owned(),
+        meter_alias: "api.requests".to_owned(),
+        stripe_event_name: "api_requests".to_owned(),
+        quantity: "42".to_owned(),
+        occurred_at: OffsetDateTime::now_utc(),
+    };
+    assert!(matches!(
+        storage::claim_meter_effect(postgres, &effect, 120)
+            .await
+            .unwrap(),
+        MeterEffectClaim::Dispatch(_)
+    ));
+    assert!(
+        storage::accept_meter_effect(postgres, &effect.delivery_id, &effect.delivery_id)
+            .await
+            .unwrap()
+    );
+    let replay = storage::claim_meter_effect(postgres, &effect, 120)
+        .await
+        .unwrap();
+    let MeterEffectClaim::Existing(replay) = replay else {
+        panic!("accepted meter delivery must replay its durable receipt");
+    };
+    assert_eq!(replay.status, EffectStatus::Accepted);
+    assert_eq!(
+        replay.provider_reference.as_deref(),
+        Some(effect.delivery_id.as_str())
+    );
+
+    let mut conflicting = effect;
+    conflicting.request_hash = Sha256::digest(b"meter-request-two").to_vec();
+    assert!(matches!(
+        storage::claim_meter_effect(postgres, &conflicting, 120)
+            .await
+            .unwrap(),
+        MeterEffectClaim::Conflict
+    ));
 }
 
 fn checkout_event() -> VerifiedEvent {
@@ -244,6 +290,7 @@ async fn schema_restart_and_effect_constraints_are_postgres_durable() {
     };
     seed_subjects_and_reject_invalid_receipts(&postgres).await;
     assert_effect_idempotency_and_uncertainty(&postgres).await;
+    assert_meter_idempotency_and_receipt(&postgres).await;
     assert_webhook_deduplication_and_reconciliation(&postgres).await;
     assert_restart_and_cleanup(database_url, schema_name, postgres).await;
 }

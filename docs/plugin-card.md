@@ -21,12 +21,15 @@ canonical Subscription and converges the matching Lenso entitlements.
   - `reconcile_next`
   - `inspect_effect`
   - `resolve_unknown_effect`
+- Provides `lenso.billing-meter-sink@1`
+  - `publish_meter_event`
 - Requires `lenso.secrets@1`, `lenso.http.client@1`, and
   `lenso.entitlements-admin@1`.
 
 The webhook ingress adapter is outside this Plugin and receives no billing
-authority beyond the exact `ingest_webhook` binding. Reconciliation workers and
-effect operators use separate immutable caller allowlists.
+authority beyond the exact `ingest_webhook` binding. Usage-billing callers,
+reconciliation workers, and effect operators use separate immutable caller
+allowlists.
 
 ## Billing boundary
 
@@ -35,6 +38,14 @@ Customer Portal sessions are the only v1 mutation surface for upgrades,
 downgrades, cancellation, and payment-method changes. The Plugin does not
 implement a renewal loop, accept raw payment details, or expose arbitrary
 Stripe API parameters.
+
+The meter sink accepts only configured provider-neutral meter aliases and maps
+them to fixed Stripe meter event names. It resolves the Stripe Customer from
+the existing `(scope_kind, scope_id, subject)` billing projection; callers
+cannot inject a Customer ID or arbitrary Stripe event name. Quantities must be
+canonical non-negative whole numbers. Event timestamps must be within Stripe's
+accepted window: no more than 35 days in the past or five minutes in the
+future.
 
 The product supplies a stable scope kind/ID and subject. Checkout metadata
 contains only opaque Lenso identifiers and the configured price alias. Email,
@@ -58,6 +69,17 @@ operator can resolve an unknown effect after correlating Stripe's request log.
 The configured uncertainty window must exceed the bound HTTP Client timeout;
 only an `in_flight` row older than that window is recovered after a process
 loss, so rolling activation cannot invalidate another live dispatch.
+
+Meter deliveries have an independent durable ledger keyed by `delivery_id`.
+The same ID is sent as Stripe's meter-event `identifier` and HTTP idempotency
+key. A byte-equivalent replay returns the stored accepted receipt; a reused ID
+with different content is an idempotency conflict. A deterministic Stripe 4xx
+response is a known rejection. A timeout, rate limit, transient response,
+malformed success body, or process loss after dispatch becomes
+`effect_unknown`; the Plugin never retries an ambiguous external mutation on
+its own. The Usage Billing operator inspects Stripe using the delivery ID and
+then resolves the upstream delivery as delivered or failed; choosing retry for
+an unresolved Stripe ledger entry remains fail-closed.
 
 ## Webhook and reconciliation boundary
 
@@ -85,7 +107,8 @@ they never publish a false converged state.
 ## Deletion boundary
 
 Removing the Plugin removes Stripe session creation, webhook receipts, billing
-projection, and entitlement reconciliation without changing Kernel or Runtime.
+projection, meter delivery, and entitlement reconciliation without changing
+Kernel or Runtime.
 The operator removes the private PostgreSQL schema only after the application's
 billing-retention policy permits it. Existing Stripe subscriptions remain
 external resources and require an explicit business migration or cancellation

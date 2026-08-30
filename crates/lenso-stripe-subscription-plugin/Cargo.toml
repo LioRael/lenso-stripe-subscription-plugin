@@ -1,7 +1,7 @@
 [package]
 name = "lenso-stripe-subscription-plugin"
 version = "0.1.0"
-description = "Durable Stripe Billing subscription Plugin for Lenso applications."
+description = "Durable Stripe subscriptions and usage-meter delivery for Lenso applications."
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
@@ -21,6 +21,7 @@ aes-gcm.workspace = true
 getrandom.workspace = true
 hmac.workspace = true
 lenso.workspace = true
+lenso-capability-billing-meter-sink.workspace = true
 lenso-capability-entitlements-admin.workspace = true
 lenso-capability-http-client.workspace = true
 lenso-capability-secrets.workspace = true

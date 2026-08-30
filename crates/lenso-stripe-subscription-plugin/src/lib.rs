@@ -1,6 +1,7 @@
-//! Durable Stripe Billing behavior for Lenso applications.
+//! Durable Stripe subscription and usage-meter behavior for Lenso applications.
 
 mod config;
+mod meter;
 mod operator;
 #[cfg(all(test, feature = "postgres-acceptance"))]
 mod postgres_tests;
@@ -12,6 +13,8 @@ mod webhook;
 use std::{cell::RefCell, fmt, rc::Rc, time::Duration as StdDuration};
 
 use lenso::{ActivateContext, DeactivateContext, Lifecycle, Port, provides};
+use lenso_capability_billing_meter_sink as meter_sink;
+use lenso_capability_billing_meter_sink::PublishMeterEventRequest;
 use lenso_capability_entitlements_admin as entitlements_admin;
 use lenso_capability_http_client as http_client;
 use lenso_capability_secrets as secrets;
@@ -33,7 +36,7 @@ use lenso_postgres_kit::OwnedPostgres;
 use url::Url;
 use zeroize::Zeroizing;
 
-pub use config::{EntitlementMapping, PriceMapping, StripeSubscriptionConfig};
+pub use config::{EntitlementMapping, MeterMapping, PriceMapping, StripeSubscriptionConfig};
 pub use operator::{StripeSubscriptionOperator, StripeSubscriptionOperatorError};
 use service::{
     AdminFlowError, CheckoutFlowError, PortalFlowError, ReceiptCipher, SubscriptionFlowError,
@@ -97,10 +100,29 @@ impl fmt::Debug for StripeSubscriptionPlugin {
     }
 }
 
-#[provides(public::StripeSubscription, admin::StripeSubscriptionAdmin)]
+#[provides(
+    public::StripeSubscription,
+    admin::StripeSubscriptionAdmin,
+    meter_sink::BillingMeterSink
+)]
 impl StripeSubscriptionPlugin {}
 
 impl StripeSubscriptionPlugin {
+    fn publish_meter_event(
+        &self,
+        context: InvocationContext,
+        request: PublishMeterEventRequest,
+    ) -> NativeRequestFuture<meter_sink::BillingMeterSink> {
+        let plugin = self.clone();
+        Box::pin(async move {
+            match plugin.publish_meter(context, request).await {
+                Ok(response) => Ok(Ok(response)),
+                Err(meter::MeterFlowError::Domain(error)) => Ok(Err(error)),
+                Err(meter::MeterFlowError::Runtime(error)) => Err(error),
+            }
+        })
+    }
+
     fn create_checkout_session(
         &self,
         context: InvocationContext,
@@ -292,6 +314,12 @@ impl Lifecycle for StripeSubscriptionPlugin {
         storage::recover_stranded_effects(&postgres, self.config.effect_uncertainty_seconds())
             .await
             .map_err(|error| service::failure(error.to_string()))?;
+        storage::recover_stranded_meter_effects(
+            &postgres,
+            self.config.effect_uncertainty_seconds(),
+        )
+        .await
+        .map_err(|error| service::failure(error.to_string()))?;
         self.prepared.borrow_mut().replace(PreparedStripe {
             postgres,
             api_base: self.config.api_base(),
@@ -333,4 +361,19 @@ async fn resolve_secret(
             )),
             SecretsInvocationError::Runtime(error) => error,
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PLUGIN_DESCRIPTOR_JSON;
+
+    #[test]
+    fn descriptor_exposes_the_provider_neutral_meter_sink() {
+        let descriptor: serde_json::Value = serde_json::from_str(PLUGIN_DESCRIPTOR_JSON).unwrap();
+        let provided = descriptor["provided_capabilities"].as_array().unwrap();
+        assert!(provided.iter().any(|capability| {
+            capability["capability_id"] == "lenso.billing-meter-sink@1"
+                && capability["descriptor_version"] == "1.0.0"
+        }));
+    }
 }

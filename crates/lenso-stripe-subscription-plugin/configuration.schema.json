@@ -16,7 +16,9 @@
     "effect_uncertainty_seconds",
     "redirect_origins",
     "prices",
+    "meters",
     "product_instances",
+    "meter_instances",
     "webhook_instances",
     "worker_instances",
     "operator_instances"
@@ -68,7 +70,22 @@
         }
       }
     },
+    "meters": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["alias", "event_name"],
+        "properties": {
+          "alias": { "$ref": "#/$defs/name" },
+          "event_name": { "type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[A-Za-z0-9._:-]+$" }
+        }
+      }
+    },
     "product_instances": { "$ref": "#/$defs/callers" },
+    "meter_instances": { "$ref": "#/$defs/callers" },
     "webhook_instances": { "$ref": "#/$defs/callers" },
     "worker_instances": { "$ref": "#/$defs/callers" },
     "operator_instances": { "$ref": "#/$defs/callers" }

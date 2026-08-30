@@ -29,6 +29,7 @@ fi
 for capability in \
   'lenso.stripe-subscription@1' \
   'lenso.stripe-subscription-admin@1' \
+  'lenso.billing-meter-sink@1' \
   'lenso.secrets@1' \
   'lenso.http.client@1' \
   'lenso.entitlements-admin@1'; do

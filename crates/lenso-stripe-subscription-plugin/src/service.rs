@@ -1266,7 +1266,7 @@ fn portal_form(customer_id: &str, return_url: &str) -> String {
     serializer.finish()
 }
 
-fn stripe_headers(
+pub(crate) fn stripe_headers(
     api_key: &str,
     idempotency_key: Option<&str>,
     form_body: bool,
