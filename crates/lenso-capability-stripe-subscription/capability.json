@@ -1,0 +1,29 @@
+{
+  "id": "lenso.stripe-subscription@1",
+  "version": "1.0.0",
+  "portable": true,
+  "cross_lane_transfer": true,
+  "operations": [
+    {
+      "name": "create_checkout_session",
+      "interaction": "request",
+      "request_schema": "schemas/create-checkout-session-request.schema.json",
+      "response_schema": "schemas/create-checkout-session-response.schema.json",
+      "domain_error_schema": "schemas/create-checkout-session-error.schema.json"
+    },
+    {
+      "name": "create_portal_session",
+      "interaction": "request",
+      "request_schema": "schemas/create-portal-session-request.schema.json",
+      "response_schema": "schemas/create-portal-session-response.schema.json",
+      "domain_error_schema": "schemas/create-portal-session-error.schema.json"
+    },
+    {
+      "name": "get_subscription",
+      "interaction": "request",
+      "request_schema": "schemas/get-subscription-request.schema.json",
+      "response_schema": "schemas/get-subscription-response.schema.json",
+      "domain_error_schema": "schemas/get-subscription-error.schema.json"
+    }
+  ]
+}
