@@ -1,6 +1,6 @@
 [package]
 name = "lenso-stripe-subscription-plugin"
-version = "0.1.0"
+version = "0.1.1"
 description = "Durable Stripe subscriptions and usage-meter delivery for Lenso applications."
 edition.workspace = true
 license.workspace = true
@@ -25,8 +25,8 @@ lenso-capability-billing-meter-sink.workspace = true
 lenso-capability-entitlements-admin.workspace = true
 lenso-capability-http-client.workspace = true
 lenso-capability-secrets.workspace = true
-lenso-capability-stripe-subscription = { path = "../lenso-capability-stripe-subscription", version = "0.1.0" }
-lenso-capability-stripe-subscription-admin = { path = "../lenso-capability-stripe-subscription-admin", version = "0.1.0" }
+lenso-capability-stripe-subscription = { path = "../lenso-capability-stripe-subscription", version = "0.1.1" }
+lenso-capability-stripe-subscription-admin = { path = "../lenso-capability-stripe-subscription-admin", version = "0.1.1" }
 lenso-kernel.workspace = true
 lenso-postgres-kit.workspace = true
 serde.workspace = true

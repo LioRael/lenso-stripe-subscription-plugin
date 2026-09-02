@@ -844,7 +844,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-stripe-subscription"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "lenso-contract-runtime",
@@ -856,7 +856,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-stripe-subscription-admin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "lenso-contract-runtime",
@@ -987,7 +987,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-stripe-subscription-plugin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aes-gcm",
  "getrandom 0.4.3",
